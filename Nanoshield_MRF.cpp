@@ -6,7 +6,7 @@
  * Copyright (c) 2015 Circuitar
  * This software is released under the MIT license. See the attached LICENSE file for details.
 */
-#include "Nanoshield_MRF.h"
+#include "/home/snapiotlenovo1/Desktop/Project/test/Zigbee_NW/Source/Nanoshield_MRF.h"
 
 #define MRF_RXMCR    0x00
 #define MRF_PANIDL   0x01
@@ -43,6 +43,11 @@
 #define MRF_SLPCON0  0x211
 #define MRF_SLPCON1  0x220
 #define MRF_TESTMODE 0x22F
+#define MRF_I_RXIF  0b00001000
+#define MRF_I_TXNIF 0b00000001
+
+volatile uint8_t flag_got_rx;
+volatile uint8_t flag_got_tx;
 
 SPISettings Nanoshield_MRF::spiSettings = SPISettings(8000000, MSBFIRST, SPI_MODE0);
 
@@ -80,9 +85,9 @@ void Nanoshield_MRF::setAddress(uint16_t addr) {
 
 void Nanoshield_MRF::setCoordinator(bool coord) {
   uint8_t reg = readShort(MRF_RXMCR);
-  writeShort(MRF_RXMCR, coord ? reg | 0b00001000 : reg & ~0b00001000);
+  writeShort(MRF_RXMCR, coord ? reg | 0b00001100 : reg & ~0b00001100);
 }
-
+/*
 void Nanoshield_MRF::setCSMACAMode(bool coord)
 {
   uint8_t reg = readShort(MRF_TXMCR);
@@ -92,7 +97,7 @@ void Nanoshield_MRF::setCSMACAMode(bool coord)
 	  reg = readShort(MRF_ORDER);
 	  writeShort(MRF_ORDER, reg | 0xFF);
   }
-}
+}*/
 void Nanoshield_MRF::setChannel(int channel) {
   if (channel < 11 || channel > 26) {
     return;
@@ -279,8 +284,10 @@ const char* Nanoshield_MRF::readString(char* str, int size) {
   return result;
 }
 
-void Nanoshield_MRF::startPacket() {
+void Nanoshield_MRF::startPacket(uint16_t panId, uint16_t srcAddr) {
   txCount = 0;
+  setPanId(panId);	
+  setAddress(srcAddr);
 }
 
 int Nanoshield_MRF::bytesLeftToWrite() {
@@ -475,3 +482,48 @@ void Nanoshield_MRF::setPromiscuous(bool enabled) {
         writeShort(MRF_RXMCR, 0x00);
     }
 }
+
+void Nanoshield_MRF::interruptHandler(void) {
+    uint8_t last_interrupt = readShort(MRF_INTSTAT);
+    if (last_interrupt & MRF_I_RXIF) {
+        flag_got_rx++;
+        // read out the packet data...
+        noInterrupts();
+        rx_disable();
+        // read start of rxfifo for, has 2 bytes more added by FCS. frame_length = m + n + 2
+        uint8_t frame_length = read_long(0x300);
+
+        // buffer all bytes in PHY Payload
+        if(bufPHY){
+            int rb_ptr = 0;
+            for (int i = 0; i < frame_length; i++) { // from 0x301 to (0x301 + frame_length -1)
+                rx_buf[rb_ptr++] = read_long(0x301 + i);
+            }
+        }
+
+        // buffer data bytes
+        int rd_ptr = 0;
+        // from (0x301 + bytes_MHR) to (0x301 + frame_length - bytes_nodata - 1)
+        for (int i = 0; i < rx_datalength(); i++) {
+            rx_info.rx_data[rd_ptr++] = read_long(0x301 + bytes_MHR + i);
+        }
+
+        rx_info.frame_length = frame_length;
+        // same as datasheet 0x301 + (m + n + 2) <-- frame_length
+        rx_info.lqi = read_long(0x301 + frame_length);
+        // same as datasheet 0x301 + (m + n + 3) <-- frame_length + 1
+        rx_info.rssi = read_long(0x301 + frame_length + 1);
+
+        rx_enable();
+        interrupts();
+    }
+    if (last_interrupt & MRF_I_TXNIF) {
+        flag_got_tx++;
+        uint8_t tmp = read_short(MRF_TXSTAT);
+        // 1 means it failed, we want 1 to mean it worked.
+        tx_info.tx_ok = !(tmp & ~(1 << TXNSTAT));
+        tx_info.retries = tmp >> 6;
+        tx_info.channel_busy = (tmp & (1 << CCAFAIL));
+    }
+}
+

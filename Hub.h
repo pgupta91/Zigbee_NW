@@ -11,15 +11,21 @@
 
 #include<stdio.h>
 #include<string.h>
-#include"Node_Setting.h"
+//#include"./Node_Setting.h"
+#include "Nanoshield_MRF.h"
+#include"/home/snapiotlenovo1/Desktop/Project/test/Zigbee_NW/Source/Node_Setting.h"
+//#include "/home/snapiotlenovo1/Desktop/Project/test/Zigbee_NW/Source/Nanoshield_MRF.h"
 class Hub: public NodeSetting
 {
 	public:
 	Hub();
-	static uint16_t AddressAllocated;
-	void assignAddress();
+	void assignAddress(Nanoshield_MRF &mrfObject, Hub &nodeData);
 	void sendData(void* data);
+	void init(Nanoshield_MRF &mrfObject);
+  bool sendData(Nanoshield_MRF &mrfObject, Hub &nodeData);
+  void sendBeacon(Nanoshield_MRF &mrfObject, Hub &txNodeData);
+  void rxData(Nanoshield_MRF &mrfObject, Hub &rxNodeData);
 };
-uint16_t Hub:: AddressAllocated = 0;
+static uint16_t AddressAllocated = 0;
 
 #endif

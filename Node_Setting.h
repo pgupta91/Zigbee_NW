@@ -12,6 +12,7 @@
 class NodeSetting
 {
 	public:
+	bool beacon;
 	bool hubNode;
 	bool endNode;
 	bool joinRequest;
@@ -24,7 +25,7 @@ class NodeSetting
 	uint16_t hubAddress;
 	
 	//void readSettingFromData(void* data);
-    void sleepMCU() = 0;
+    //void sleepMCU() = 0;
 	//char* writeSettingToData();
 };
 #endif

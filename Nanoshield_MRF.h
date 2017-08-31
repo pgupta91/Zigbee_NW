@@ -74,7 +74,7 @@ class Nanoshield_MRF
     void setPanId(uint16_t panId);
     void setAddress(uint16_t addr);
     void setCoordinator(bool coord);
-	  void setCSMACAMode(bool coord);
+	  //void setCSMACAMode(bool coord);
 	  void setPromiscuous(bool enabled);
     void*getBufferData(bool selectBuffer);
     void setChannel(int channel);
@@ -101,14 +101,16 @@ class Nanoshield_MRF
     int writeString(char* str);
     const char* readString(char* str = NULL, int size = 0);
     
-    void startPacket();
+    void startPacket(uint16_t panId, uint16_t srcAddr);
     int bytesLeftToWrite();
     bool sendPacket(uint16_t addr, bool ack = false);
     bool transmissionDone();
     bool transmissionSuccess();
     bool receivePacket();
     int bytesLeftToRead();
-
+    bool writeToBuffer(void* data, int size);
+    bool readFromBuffer(void* data, int size);
+    void init();
   private:
     static SPISettings spiSettings;
   
@@ -126,14 +128,11 @@ class Nanoshield_MRF
     uint8_t lqi;
  
     void reset();
-    void init();
     void enablePaLna();
     uint8_t readShort(uint8_t address);
     void writeShort(uint8_t address, uint8_t data);
     uint8_t readLong(uint16_t address);
     void writeLong(uint16_t address, uint8_t data);
-    bool writeToBuffer(void* data, int size);
-    bool readFromBuffer(void* data, int size);
 };
 
 #endif

@@ -1,4 +1,3 @@
-#include <Nanoshield_MRF.h>
 #include "Node.h"
 /*
 	bool hubNode;
@@ -13,6 +12,7 @@
 	*/
 Node::Node()
 {
+	beacon = false;
 	hubNode = false;
 	endNode = true;
 	joinRequest = false;
@@ -25,43 +25,104 @@ Node::Node()
 	hubAddress = 0;
 }
 
-void Node::init(Nanoshield_MRF &mrfObject)
+void Node::init(Nanoshield_MRF &mrfObject, bool &findHub, Node &nodeData)
 {
-	if(nodeAddress == 0 && !acceptJoinRequest)
+	mrfObject.begin();
+	if(nodeData.nodeAddress == 0 && !nodeData.acceptJoinRequest)
 	{
-		sendJoinRequest(mrfObject);	
+		findHub = false;
 	}
 }
 
-void Node::sendJoinRequest(Nanoshield_MRF &mrfObject)
+void Node::checkForHub(Nanoshield_MRF &mrfObject, bool&findHub, Node &nodeData)
 {
-	if(!joinRequest && !acceptJoinRequest)
+  resetNodeData(nodeData);
+ 	mrfObject.setPanId(0);	
+  	mrfObject.setAddress(0);        // Network address
+  	mrfObject.setCoordinator(0); // Module is coordinator
+  	mrfObject.setPromiscuous(1);
+	int numtry = 0;
+	while(numtry < 10)
 	{
-		NodeSettings newNode;
-		newNode.hubNode = false;
-		newNode.endNode = true;
-		newNode.joinRequest = true;
-		newNode.acceptJoinRequest = false;
-		newNode.heartBeat = true;
-		newNode.waterLevel = false;
-		newNode.humidity = 0.0;
-		newNode.panId = panId;
-		newNode.nodeAddress = 0;
-		newNode.hubAddress = 300;
-		mrfObject.setAddress(newNode.nodeAddress)
-		mrfObject.startPacket();
-		mrfObject.writeToBuffer(&newNode, sizeof(NodeSettings));
-		mrfObject.sendPacket(newNode.hubAddress);
+		numtry++;
+		if(mrfObject.receivePacket())
+		{
+			memcpy(&nodeData, mrfObject.getBufferData(true), sizeof(Node));
+      if(nodeData.beacon)
+			{
+        Serial.print(" beacon ");
+        Serial.print(nodeData.beacon);
+        Serial.print(" hubAddress ");
+        Serial.print(this->hubAddress);
+        Serial.print(" \n ");
+				this->hubAddress = 	nodeData.hubAddress;
+				this->panId = nodeData.panId;
+				if(sendJoinRequest(mrfObject, nodeData))
+				{
+          findHub = true;
+					break;
+				}
+			}
+		}
+		delay(1);
 	}
-
-	
+ mrfObject.setPromiscuous(0);
 }
 
-void Node::setMyAddress()
+bool Node::sendJoinRequest(Nanoshield_MRF &mrfObject, Node &nodeData)
 {
-	if(acceptJoinRequest)
-	{
-		void*data = getdataBuffer(true);
-		readSettingFromData(data);
+	nodeData.beacon = false;
+	nodeData.hubNode = false;
+	nodeData.endNode = true;
+	nodeData.joinRequest = true;
+	nodeData.acceptJoinRequest = false;
+	nodeData.heartBeat = false;
+	nodeData.waterLevel = false;
+	nodeData.humidity = 0.0;
+	nodeData.panId = this->panId;
+	nodeData.nodeAddress = 0;
+	nodeData.hubAddress = this->hubAddress;
+	if(sendData(mrfObject,nodeData))
+	{	
+	  //delay(100);
+		if(mrfObject.receivePacket())
+		{
+			delay(2);
+			memcpy(&nodeData, mrfObject.getBufferData(true), sizeof(Node));
+			if(nodeData.acceptJoinRequest && nodeData.nodeAddress != 0)
+			{
+				this->nodeAddress = nodeData.nodeAddress;
+        Serial.print(" nodeAddress ");
+        Serial.print(this->nodeAddress);
+        Serial.print(" \n ");
+				return true;
+			}
+		}
 	}
+	return false;
 }
+
+void Node::resetNodeData(Node &nodeData)
+{
+  memset(&nodeData,0,sizeof(Node));
+}
+
+void Node::getSensorData(Node &nodeData)
+{
+  resetNodeData(nodeData);
+  nodeData.waterLevel = true;
+  nodeData.humidity = 35.0;  
+}
+
+bool Node::sendData(Nanoshield_MRF &mrfObject, Node &nodeData)
+{
+  mrfObject.startPacket(nodeData.panId, nodeData.nodeAddress);
+  mrfObject.writeToBuffer(&nodeData, sizeof(Node));
+  if(mrfObject.sendPacket(nodeData.hubAddress))
+  {
+    return true;  
+  }
+  return false;
+}
+
+
